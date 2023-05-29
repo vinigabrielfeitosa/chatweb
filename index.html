@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <title>Bate-papo Node.js e Socket.IO</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #313338;
+      margin: 0;
+      padding: 0;
+    }
+
+    .chat-header {
+      background-color: #2b2d31;
+      color: #fff;
+      padding: 10px;
+      display: flex;
+      justify-content: center;
+      text-align: center;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+      border-bottom: 1px solid black;
+    }
+
+    .chat-header-titulo {
+      font-weight: bold;
+      font-size: 18px;
+    }
+
+    #messages {
+      list-style-type: none;
+      padding: 0;
+      margin: 0;
+      /* border: 1px solid red; */
+      padding-top: 5px;
+      max-height: 100%;
+      max-width: 100%;
+      margin-bottom: 60px;
+    }
+
+    li {
+      padding: 5px 10px;
+      background-color: transparent;
+      border-top: 1px solid #3d3f45;
+      color: white;
+      border-radius: 8px;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: flex-start;
+    }
+
+    .message-perfil {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background-color: #7289DA;
+      color: #fff;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-weight: bold;
+      margin-right: 10px;
+    }
+
+    .message-conteudo {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .message-info {
+      display: flex;
+      align-items: baseline;
+      flex-wrap: wrap;
+      margin-bottom: auto;
+    }
+
+    .message-name {
+      font-weight: bold;
+      margin-right: 5px;
+    }
+
+    .message-time {
+      font-size: 0.8rem;
+      color: #888;
+    }
+
+    .message-text {
+      margin-top: 5px;
+      word-break: break-word
+    }
+
+    .message-usuario-conectado {
+      background-color: transparent;
+      font-weight: bold;
+      text-align: center;
+      padding-top: 3px;
+      padding: 5px;
+      color: #fff;
+    }
+
+    form {
+      background-color: #313338;
+      padding: 10px;
+      position: fixed;
+      bottom: 0;
+      width: 100%;
+      display: flex;
+    }
+
+    input[type="text"] {
+      border: none;
+      box-sizing: border-box;
+      font-weight: 400;
+      font-size: 1rem;
+      line-height: 1.375rem;
+      width: 100%;
+      height: 40px;
+      min-height: 44px;
+      padding-left: 0;
+      padding-right: 10px;
+      border: 1px solid #2e2f33;
+      border-radius: 2px;
+      margin: 0;
+      background-color: #383a40;
+      color: white;
+    }
+
+    button {
+      padding: 5px 10px;
+      border: none;
+      background-color: #7289DA;
+      color: #fff;
+      border-radius: 3px;
+      cursor: pointer;
+    }
+
+    .forms{
+      margin: 0;
+      padding: 0;
+    }
+
+    @media screen and (max-width: 700px) {
+  body {
+    font-size: 14px;
+  }
+  
+  .chat-header {
+    font-size: 16px;
+  }
+  
+  input[type="text"], button {
+    font-size: 14px;
+    height: 30px;
+  }
+}
+
+  </style>
+</head>
+
+<body>
+<div class="chat-header">
+  <div class="chat-header-titulo">SERVIDOR PRINCIPAL</div>
+</div>
+
+<ul id="messages"></ul>
+<form class="forms" action="">
+  <input id="name" type="text" placeholder="Seu nome de usuário" style="width: 40%; background-color: #232428; color: white;" autocomplete="off" maxlength="10" /><br>
+  <input id="message" type="text" placeholder="Sua mensagem" autocomplete="off" maxlength="300" /><button>Enviar</button>
+</form>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+  const socket = io();
+  const nameInput = document.getElementById('name');
+  const messageInput = document.getElementById('message');
+  const messages = document.getElementById('messages');
+  let usernameSubmitted = false;
+  let nameInputDisabled = false;
+
+  // Evento de escuta para o envio do formulário
+  document.querySelector('form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    const name = nameInput.value;
+    const message = messageInput.value;
+    if (name.trim() && message.trim()) {
+      socket.emit('chat message', { name, message });
+      messageInput.value = '';
+    }
+  });
+
+// Evento de escuta para apertar enter no campo do nome
+nameInput.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter' && nameInput.value.trim()) {
+    event.preventDefault();
+    if (!usernameSubmitted && !nameInputDisabled) {
+      usernameSubmitted = true;
+      socket.emit('user connected', nameInput.value);
+      nameInput.disabled = true; // Desabilita a caixa de texto "name"
+    }
+  }
+});
+
+// Evento de escuta para quando o campo do nome perde o foco blur
+nameInput.addEventListener('blur', () => {
+  if (!usernameSubmitted && !nameInputDisabled && nameInput.value.trim()) {
+    usernameSubmitted = true;
+    socket.emit('user connected', nameInput.value);
+    nameInput.disabled = true; // Desabilita a caixa de texto "name"
+  }
+});
+
+
+  //Evento de escuta para mensagens de chat recebidas do servidor
+  socket.on('chat message', (data) => {
+    displayChatMessage(data);
+    showActiveUserNotification(data.name);
+  });
+
+  // Função para exibir mensagens de chat
+  function displayChatMessage(data) {
+  const li = document.createElement('li');
+  const messageProfile = document.createElement('div'); // Cria um elemento div para o perfil do usuário que enviou a mensagem.
+  messageProfile.classList.add('message-perfil'); // Puxa a classe css messageperfil a div anterior que criei
+
+  // Verifica se a mensagem não é uma mensagem de conexão
+  if (!data.connectMessage) {
+    messageProfile.textContent = data.name.charAt(0).toUpperCase(); // Define a div messageProfile como a primeira letra maiúscula do nome
+  }
+
+  li.appendChild(messageProfile);
+  //Appendchild serve pra definir como filho
+
+  //conteudo mensagem
+  const messageContent = document.createElement('div');
+  messageContent.classList.add('message-conteudo');
+
+  //infos como nome e horario
+  const messageInfo = document.createElement('div');
+  messageInfo.classList.add('message-info');
+
+  //Verifica se nao é uma mensagem de conexao
+  if (!data.connectMessage) {
+    const messageName = document.createElement('span'); //cria elemento p nome do usuario que mandou a mensagem
+    messageName.classList.add('message-name');
+    messageName.textContent = data.name; //definir com o nome do usuario mandou a mensagem
+    messageInfo.appendChild(messageName);
+
+    const messageTime = document.createElement('span'); //cria elemento p exibir horario da mensagem
+    messageTime.classList.add('message-time');
+    messageTime.textContent = getCurrentTime(); //define com o horario que mandou a mensagem
+    messageInfo.appendChild(messageTime);
+  }
+
+  const messageText = document.createElement('span'); // Cria elemento p exibir o texto da mensagem
+  messageText.classList.add('message-text');
+  messageText.textContent = data.message; // define o messageText como o texto da mensagem.
+
+  messageContent.appendChild(messageInfo);
+  messageContent.appendChild(messageText);
+
+  li.appendChild(messageContent); // Adiciona o elemento messageContent como um filho do elemento li.
+
+  //Verifica é uma mensagem de conexao
+  if (data.connectMessage) {
+    li.classList.add('message-usuario-conectado');
+    messageProfile.style.display = 'none'; //oculta o icone de perfil
+    messageInfo.style.display = 'none';
+  }
+
+  messages.appendChild(li);
+}
+
+
+  //Função para obter a hora atual para colocar na mensagem para indicar quando foi enviado
+  function getCurrentTime() {
+    //criando uma const para cada parte da hora
+    const now = new Date();
+    //usando o metodo padstart para preencher string com caracteres a esquerda ate atingir o limite que foi selecionado
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    //retorna no formato hora:minutos
+    return `${hours}:${minutes}`;
+  }
+</script>
+</body>
+</html>
